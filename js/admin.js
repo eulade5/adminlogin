@@ -1,26 +1,17 @@
-const SUPABASE_URL='https://mqqkhliuveosvufpqjvh.supabase.co'
-
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xcWtobGl1dmVvc3Z1ZnBxanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3ODI3MjUsImV4cCI6MjA5NDM1ODcyNX0.rMd3d-YTh3flvwIU9qK7y7fUesPNSw7z1Lj3A40IYjw'
 
 const sb=supabase.createClient(
-SUPABASE_URL,
-SUPABASE_ANON_KEY
+'https://mqqkhliuveosvufpqjvh.supabase.co',
+'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xcWtobGl1dmVvc3Z1ZnBxanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3ODI3MjUsImV4cCI6MjA5NDM1ODcyNX0.rMd3d-YTh3flvwIU9qK7y7fUesPNSw7z1Lj3A40IYjw'
 )
 
-const loginForm=document.getElementById('login-form')
-const dashboard=document.getElementById('dashboard')
-const loginScreen=document.getElementById('login-screen')
-
-loginForm.addEventListener('submit', async(e)=>{
+document.getElementById('login-form')
+.addEventListener('submit',async(e)=>{
 
 e.preventDefault()
 
-const email=document.getElementById('email').value
-const password=document.getElementById('password').value
-
 const {data,error}=await sb.auth.signInWithPassword({
-email,
-password
+email:document.getElementById('email').value,
+password:document.getElementById('password').value
 })
 
 if(error){
@@ -28,33 +19,110 @@ document.getElementById('login-error').textContent=error.message
 return
 }
 
-loginScreen.style.display='none'
-dashboard.style.display='block'
-
+document.getElementById('login-screen').style.display='none'
+document.getElementById('dashboard').style.display='block'
 document.getElementById('admin-email').textContent=data.user.email
 
+loadCategories()
 loadProducts()
 })
 
 document.getElementById('logout-btn')
-.addEventListener('click', async()=>{
+.addEventListener('click',async()=>{
 
 await sb.auth.signOut()
-
 location.reload()
+})
+
+async function loadCategories(){
+
+const {data}=await sb.from('categories').select('*')
+
+const select=document.getElementById('product-category')
+select.innerHTML=''
+
+const list=document.getElementById('categories-list')
+list.innerHTML=''
+
+data.forEach(cat=>{
+
+const option=document.createElement('option')
+option.value=cat.name
+option.textContent=cat.name
+select.appendChild(option)
+
+const div=document.createElement('div')
+div.className='category-item'
+
+div.innerHTML=`
+<span>${cat.name}</span>
+<button onclick="deleteCategory('${cat.id}')">Delete</button>
+`
+
+list.appendChild(div)
+})
+}
+
+document.getElementById('category-form')
+.addEventListener('submit',async(e)=>{
+
+e.preventDefault()
+
+await sb.from('categories').insert({
+name:document.getElementById('category-name').value
+})
+
+document.getElementById('category-form').reset()
+
+loadCategories()
+})
+
+async function uploadImage(file){
+
+const fileName=Date.now() + '-' + file.name
+
+await sb.storage
+.from('product-images')
+.upload(fileName,file)
+
+const {data}=sb.storage
+.from('product-images')
+.getPublicUrl(fileName)
+
+return data.publicUrl
+}
+
+document.getElementById('product-form')
+.addEventListener('submit',async(e)=>{
+
+e.preventDefault()
+
+let imageUrl=''
+
+const file=document.getElementById('product-image-file').files[0]
+
+if(file){
+imageUrl=await uploadImage(file)
+}
+
+await sb.from('products').insert({
+name:document.getElementById('product-name').value,
+category:document.getElementById('product-category').value,
+description:document.getElementById('product-description').value,
+image:imageUrl
+})
+
+document.getElementById('product-form').reset()
+
+loadProducts()
 })
 
 async function loadProducts(){
 
-const {data,error}=await sb
+const {data}=await sb
 .from('products')
 .select('*')
 .order('created_at',{ascending:false})
-
-if(error){
-console.error(error)
-return
-}
 
 const list=document.getElementById('products-list')
 
@@ -70,57 +138,24 @@ div.innerHTML=`
 <h3>${product.name}</h3>
 <p>${product.category || ''}</p>
 <p>${product.description || ''}</p>
-
 ${product.image ? `<img src="${product.image}">` : ''}
-
-<button onclick="deleteProduct('${product.id}')">
-Delete
-</button>
+<button onclick="deleteProduct('${product.id}')">Delete</button>
 `
 
 list.appendChild(div)
 })
 }
 
-document.getElementById('product-form')
-.addEventListener('submit', async(e)=>{
-
-e.preventDefault()
-
-const payload={
-name:document.getElementById('product-name').value,
-category:document.getElementById('product-category').value,
-image:document.getElementById('product-image').value,
-description:document.getElementById('product-description').value
-}
-
-const {error}=await sb
-.from('products')
-.insert(payload)
-
-if(error){
-alert(error.message)
-return
-}
-
-document.getElementById('product-form').reset()
-
-loadProducts()
-})
-
 async function deleteProduct(id){
 
-if(!confirm('Delete product?')) return
-
-const {error}=await sb
-.from('products')
-.delete()
-.eq('id',id)
-
-if(error){
-alert(error.message)
-return
-}
+await sb.from('products').delete().eq('id',id)
 
 loadProducts()
+}
+
+async function deleteCategory(id){
+
+await sb.from('categories').delete().eq('id',id)
+
+loadCategories()
 }
